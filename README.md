@@ -9,7 +9,8 @@ Powered by [Puppeteer](https://github.com/GoogleChrome/puppeteer), headless-chro
 
 * Configure concurrency, delay and retry
 * Breadth-first search (BFS) to automatically follow links
-* Pluggable cache such as [Redis](https://redis.io) to skip duplicate requests
+* Pluggable cache storages such as [Redis](https://redis.io) to skip duplicate requests
+* Support CSV and [JSON Lines](http://jsonlines.org) formats for exporting results
 * Pause at the max request and resume at any time
 * Insert [jQuery](https://jquery.com) automatically for scraping
 * Save screenshot for the crawling evidence
