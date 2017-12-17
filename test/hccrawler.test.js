@@ -1,13 +1,19 @@
+const { unlink, readFile } = require('fs');
 const { noop } = require('lodash');
 const assert = require('assert');
 const sinon = require('sinon');
 const HCCrawler = require('../');
 const RedisCache = require('../cache/redis');
+const CSVExporter = require('../exporter/csv');
+const JSONLineExporter = require('../exporter/json-line');
 const Crawler = require('../lib/crawler');
 
 const URL1 = 'http://www.example.com/';
 const URL2 = 'http://www.example.net/';
 const URL3 = 'http://www.example.org/';
+const CSV_FILE = './tmp/result.csv';
+const JSON_FILE = './tmp/result.json';
+const ENCODING = 'utf8';
 
 describe('HCCrawler', () => {
   let crawler;
@@ -45,18 +51,6 @@ describe('HCCrawler', () => {
       it('throws an error when queueing options without URL', () => {
         assert.throws(() => {
           crawler.queue({ evaluatePage: noop, onSuccess: noop });
-        });
-      });
-
-      it('throws an error when queueing options without evaluatePage', () => {
-        assert.throws(() => {
-          crawler.queue({ url: URL1, onSuccess: noop });
-        });
-      });
-
-      it('throws an error when queueing options without onSuccess', () => {
-        assert.throws(() => {
-          crawler.queue({ url: URL1, evaluatePage: noop });
         });
       });
 
@@ -343,6 +337,101 @@ describe('HCCrawler', () => {
           .then(() => {
             assert.equal(Crawler.prototype.crawl.callCount, 3);
           });
+      });
+    });
+
+    context('when the crawler is launched with crawler option', () => {
+      function removeTemporaryFile(file) {
+        return new Promise(resolve => {
+          unlink(file, (() => void resolve()));
+        });
+      }
+
+      function readTemporaryFile(file) {
+        return new Promise((resolve, reject) => {
+          readFile(file, ENCODING, ((error, result) => {
+            if (error) return reject(error);
+            return resolve(result);
+          }));
+        });
+      }
+
+      afterEach(() => (
+        crawler.close()
+          .then(() => removeTemporaryFile(CSV_FILE))
+      ));
+
+      context('when the crawler is launched with exporter = CSVExporter', () => {
+        beforeEach(() => (
+          removeTemporaryFile(CSV_FILE)
+            .then(() => {
+              const exporter = new CSVExporter({
+                file: CSV_FILE,
+                fields: ['result.title'],
+              });
+              return HCCrawler.launch({
+                evaluatePage: noop,
+                onSuccess: noop,
+                maxConcurrency: 1,
+                exporter,
+              })
+                .then(_crawler => {
+                  crawler = _crawler;
+                });
+            })
+        ));
+
+        it('exports a CSV file', () => {
+          assert.doesNotThrow(() => {
+            crawler.queue(URL1);
+            crawler.queue(URL2);
+          });
+          return crawler.onIdle()
+            .then(() => readTemporaryFile(CSV_FILE))
+            .then(actual => {
+              const header = 'result.title\n';
+              const line1 = 'Example Domain\n';
+              const line2 = 'Example Domain\n';
+              const expected = header + line1 + line2;
+              assert.equal(actual, expected);
+            });
+        });
+      });
+
+      context('when the crawler is launched with exporter = JSONLineExporter', () => {
+        beforeEach(() => (
+          removeTemporaryFile(JSON_FILE)
+            .then(() => {
+              const exporter = new JSONLineExporter({
+                file: JSON_FILE,
+                fields: ['result.title'],
+              });
+              return HCCrawler.launch({
+                evaluatePage: noop,
+                onSuccess: noop,
+                maxConcurrency: 1,
+                exporter,
+              })
+                .then(_crawler => {
+                  crawler = _crawler;
+                });
+            })
+        ));
+
+        it('exports a json-line file', () => {
+          assert.doesNotThrow(() => {
+            crawler.queue(URL1);
+            crawler.queue(URL2);
+          });
+          return crawler.onIdle()
+            .then(() => readTemporaryFile(JSON_FILE))
+            .then(actual => {
+              const line1 = `${JSON.stringify({ result: { title: 'Example Domain' } })}\n`;
+              const line2 = `${JSON.stringify({ result: { title: 'Example Domain' } })}\n`;
+              const expected = line1 + line2;
+              assert.equal(actual, expected);
+            });
+        });
       });
     });
 
